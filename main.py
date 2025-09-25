@@ -120,11 +120,17 @@ class ScriptWriterApp:
         script_frame = tk.Frame(main_frame, bg='#2b2b2b')
         script_frame.pack(fill=tk.X, pady=(10, 0))
         
-        self.make_script_btn = tk.Button(script_frame, text="Make Script", 
+        self.make_script_btn = tk.Button(script_frame, text="Make TikTok Script", 
                                         command=self.make_script,
                                         bg='#FF9800', fg='white', font=('Arial', 12, 'bold'),
                                         padx=20, pady=5, state=tk.DISABLED)
-        self.make_script_btn.pack(side=tk.LEFT)
+        self.make_script_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.make_facebook_btn = tk.Button(script_frame, text="Make Facebook Post", 
+                                          command=self.make_facebook_post,
+                                          bg='#4267B2', fg='white', font=('Arial', 12, 'bold'),
+                                          padx=20, pady=5, state=tk.DISABLED)
+        self.make_facebook_btn.pack(side=tk.LEFT)
         
         # Progress bar
         self.progress = ttk.Progressbar(script_frame, mode='indeterminate')
@@ -161,6 +167,10 @@ class ScriptWriterApp:
             self.topics_listbox.insert(tk.END, display_text)
         
         self.status_label.config(text=f"Found {len(self.current_topics)} topics")
+        
+        # Enable both buttons when topics are loaded
+        self.make_script_btn.config(state=tk.NORMAL)
+        self.make_facebook_btn.config(state=tk.NORMAL)
     
     def _scraping_finished(self):
         self.is_generating = False
@@ -188,6 +198,31 @@ class ScriptWriterApp:
     
     def on_topic_double_click(self, event):
         self.make_script()
+    
+    def make_facebook_post(self):
+        selection = self.topics_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a topic first.")
+            return
+        
+        topic_index = selection[0]
+        # Find the actual topic (accounting for filtering)
+        search_term = self.search_var.get().lower()
+        if search_term:
+            filtered_topics = [topic for topic in self.current_topics 
+                              if search_term in topic['title'].lower() or 
+                              search_term in topic['source'].lower()]
+            topic = filtered_topics[topic_index]
+        else:
+            topic = self.current_topics[topic_index]
+        
+        # Generate Facebook post in separate thread
+        self.make_facebook_btn.config(state=tk.DISABLED, text="Generating Post...")
+        self.progress.start()
+        
+        thread = threading.Thread(target=self._generate_facebook_post, args=(topic,))
+        thread.daemon = True
+        thread.start()
     
     def make_script(self):
         selection = self.topics_listbox.curselection()
@@ -222,6 +257,15 @@ class ScriptWriterApp:
             self.root.after(0, lambda: self._show_error(f"Error generating script: {str(e)}"))
         finally:
             self.root.after(0, self._script_generation_finished)
+    
+    def _generate_facebook_post(self, topic):
+        try:
+            post = self.chatgpt.generate_facebook_post(topic, self.settings_manager)
+            self.root.after(0, lambda: self._show_facebook_post(post, topic))
+        except Exception as e:
+            self.root.after(0, lambda: self._show_error(f"Error generating Facebook post: {str(e)}"))
+        finally:
+            self.root.after(0, self._facebook_post_generation_finished)
     
     
     def _show_script(self, script, topic):
@@ -266,8 +310,53 @@ class ScriptWriterApp:
             messagebox.showerror("Error", f"Failed to save script: {str(e)}")
     
     def _script_generation_finished(self):
-        self.make_script_btn.config(state=tk.NORMAL, text="Make Script")
+        self.make_script_btn.config(state=tk.NORMAL, text="Make TikTok Script")
         self.progress.stop()
+    
+    def _facebook_post_generation_finished(self):
+        self.make_facebook_btn.config(state=tk.NORMAL, text="Make Facebook Post")
+        self.progress.stop()
+    
+    def _show_facebook_post(self, post, topic):
+        # Create new window for Facebook post display
+        post_window = tk.Toplevel(self.root)
+        post_window.title(f"Facebook Post: {topic['title'][:50]}...")
+        post_window.geometry("600x500")
+        post_window.configure(bg='#2b2b2b')
+        
+        # Title
+        title_label = tk.Label(post_window, text=topic['title'], 
+                              font=('Arial', 14, 'bold'), 
+                              fg='#ffffff', bg='#2b2b2b', wraplength=550)
+        title_label.pack(pady=10)
+        
+        # Post content
+        post_text = scrolledtext.ScrolledText(post_window, 
+                                              font=('Arial', 11),
+                                              bg='#3b3b3b', fg='#ffffff',
+                                              wrap=tk.WORD)
+        post_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        post_text.insert(tk.END, post)
+        post_text.config(state=tk.DISABLED)
+        
+        # Save button
+        save_btn = tk.Button(post_window, text="Save Post", 
+                            command=lambda: self._save_facebook_post(post, topic),
+                            bg='#4267B2', fg='white', font=('Arial', 12))
+        save_btn.pack(pady=10)
+    
+    def _save_facebook_post(self, post, topic):
+        filename = f"facebook_post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(f"Topic: {topic['title']}\n")
+                f.write(f"Source: {topic['source']}\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("-" * 50 + "\n\n")
+                f.write(post)
+            messagebox.showinfo("Saved", f"Facebook post saved as {filename}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save post: {str(e)}")
     
     def open_settings(self):
         settings_window = tk.Toplevel(self.root)

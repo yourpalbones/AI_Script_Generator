@@ -189,6 +189,18 @@ class ChatGPTAutomation:
         except Exception as e:
             raise Exception(f"Error generating script: {e}")
     
+    def generate_facebook_post(self, topic, settings_manager):
+        """Generate a Facebook post for the given topic"""
+        try:
+            # Create the Facebook post prompt
+            prompt = self._create_facebook_post_prompt(topic)
+            
+            # Use manual clipboard approach (simple and reliable)
+            return self._generate_facebook_post_manual(topic, prompt)
+            
+        except Exception as e:
+            raise Exception(f"Error generating Facebook post: {e}")
+    
     def _generate_script_automated(self, topic, prompt):
         """Try to generate script using automated Chrome approach"""
         # Setup Chrome driver if not already done
@@ -408,6 +420,107 @@ CONTENT REQUIREMENTS:
 Format as a clear, professional script ready for TikTok recording."""
         
         return prompt
+    
+    def _create_facebook_post_prompt(self, topic):
+        """Create the Facebook post prompt"""
+        # Clean up the topic title and summary
+        title = topic['title'].strip()
+        source = topic['source'].strip()
+        summary = topic.get('summary', 'No summary available').strip()
+        time_ago = topic.get('time_ago', 'Recently')
+        
+        # Truncate summary if too long
+        if len(summary) > 200:
+            summary = summary[:200] + "..."
+        
+        prompt = f"""Write a Facebook post about: {title}
+
+Source: {source}
+Summary: {summary}
+Posted: {time_ago}
+
+REQUIREMENTS:
+- Style: Blend of Jon Stewart, John Oliver, and YourPalBones
+- Liberal/progressive perspective with sharp political commentary
+- Informative, funny, and factually correct
+- Perfect for Facebook engagement
+- Length: 2-4 paragraphs (Facebook-appropriate length)
+- Include relevant hashtags
+
+STYLE ELEMENTS:
+- Jon Stewart: Conversational, relatable tone with perfect comedic timing
+- John Oliver: Informative yet entertaining, builds to strong punchlines
+- YourPalBones: Sarcastic, witty observations with sharp political commentary
+- Use current events and cultural references
+- Make it engaging and shareable
+
+CONTENT REQUIREMENTS:
+- Be informative and factually accurate
+- Include relevant context and background
+- Use conversational language and relatable analogies
+- Focus on the absurdity, hypocrisy, or comedic elements
+- Make it shareable and engaging for Facebook audience
+- Include 3-5 relevant hashtags at the end
+- Liberal/progressive political perspective
+
+Format as a clear, engaging Facebook post ready to publish."""
+        
+        return prompt
+    
+    def _generate_facebook_post_manual(self, topic, prompt):
+        """Manual method for Facebook post generation"""
+        # Copy prompt to clipboard
+        pyperclip.copy(prompt)
+        
+        # Open ChatGPT in browser
+        webbrowser.open("https://chat.openai.com")
+        
+        # Show instructions to user
+        instructions = f"""
+Facebook Post Generation
+
+The Facebook post prompt has been copied to your clipboard.
+
+Instructions:
+1. ChatGPT should now be open in your browser
+2. If you're not logged in, please log in to ChatGPT
+3. Paste the prompt (Ctrl+V) into the chat
+4. Press Enter to submit
+5. Wait for ChatGPT to generate the Facebook post
+6. Copy the generated post (select all and Ctrl+C)
+7. Click 'OK' when you have the post ready
+
+Topic: {topic['title'][:50]}...
+
+The post will be optimized for Facebook with Jon Stewart/John Oliver/YourPalBones style.
+
+IMPORTANT: Make sure to copy the ENTIRE generated post before clicking OK!
+"""
+        
+        # Show message box with instructions
+        import tkinter as tk
+        from tkinter import messagebox
+        
+        root = tk.Tk()
+        root.withdraw()  # Hide the main window
+        
+        result = messagebox.askokcancel("Facebook Post Generation", instructions)
+        
+        if result:
+            # Get the post from clipboard
+            post = pyperclip.paste()
+            
+            # Validate that we got a post (more lenient validation)
+            if len(post) < 30 or post.strip() == "":
+                raise Exception("Please copy the generated Facebook post from ChatGPT and try again")
+            
+            # Check if it's still the prompt (not the generated post)
+            if "Write a Facebook post about:" in post and len(post) < 200:
+                raise Exception("Please copy the generated Facebook post from ChatGPT and try again. Make sure you copied the post response, not the prompt.")
+            
+            return post
+        else:
+            raise Exception("Facebook post generation cancelled by user")
     
     def _extract_response(self):
         """Extract the generated script from ChatGPT response"""
